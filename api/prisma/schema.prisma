@@ -1,0 +1,760 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserStatus {
+  active
+  disabled
+}
+
+enum OrgRole {
+  owner
+  admin
+  member
+  viewer
+}
+
+enum KnowledgeBaseStatus {
+  active
+  archived
+}
+
+enum DocumentStatus {
+  pending
+  processing
+  ready
+  failed
+}
+
+enum ParseStatus {
+  pending
+  processing
+  succeeded
+  failed
+}
+
+enum IngestionJobStatus {
+  queued
+  running
+  succeeded
+  failed
+}
+
+enum ConversationStatus {
+  active
+  archived
+}
+
+enum MessageRole {
+  user
+  assistant
+  system
+}
+
+enum FeedbackRating {
+  positive
+  negative
+}
+
+enum AclPrincipalType {
+  user
+  role
+}
+
+enum AclPermission {
+  read
+  write
+  admin
+}
+
+enum ConnectorType {
+  local_folder
+  google_drive
+  notion
+  confluence
+  slack_export
+}
+
+enum DocumentTrustStatus {
+  unverified
+  verified
+  rejected
+}
+
+enum DocumentKind {
+  file
+  note
+}
+
+enum EntityType {
+  person
+  team
+  project
+  topic
+}
+
+enum EvalRunStatus {
+  queued
+  running
+  succeeded
+  failed
+}
+
+enum ConnectorStatus {
+  active
+  paused
+  error
+}
+
+enum OrganizationCreateRequestStatus {
+  pending
+  approved
+  rejected
+}
+
+enum ConnectorSyncStatus {
+  queued
+  running
+  succeeded
+  failed
+}
+
+model User {
+  id               String     @id @default(uuid()) @db.Uuid
+  email            String     @unique @db.Citext
+  passwordHash     String     @map("password_hash")
+  name             String
+  avatarUrl        String?    @map("avatar_url")
+  emailVerifiedAt  DateTime?  @map("email_verified_at") @db.Timestamptz(6)
+  isPlatformAdmin  Boolean    @default(false) @map("is_platform_admin")
+  status           UserStatus @default(active)
+  createdAt        DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime   @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt        DateTime?  @map("deleted_at") @db.Timestamptz(6)
+
+  memberships          OrganizationMember[]
+  refreshTokens        RefreshToken[]
+  ownedOrgsCreated     Organization[]       @relation("OrgCreator")
+  inviteLinksCreated   InviteLink[]         @relation("InviteLinkCreator")
+  auditLogs            AuditLog[]
+  knowledgeBasesCreated KnowledgeBase[]     @relation("KbCreator")
+  documentsCreated     Document[]           @relation("DocumentCreator")
+  documentVersionsCreated DocumentVersion[] @relation("DocumentVersionCreator")
+  conversations        Conversation[]
+  feedback             Feedback[]
+  aiUsageLogs          AiUsageLog[]
+  connectorsCreated    Connector[]          @relation("ConnectorCreator")
+  botsCreated          Bot[]                @relation("BotCreator")
+  documentsOwned       Document[]           @relation("DocumentOwner")
+  documentsVerified    Document[]           @relation("DocumentVerifier")
+  oidcIdentities       OidcIdentity[]
+  entityLinks          EntityLink[]         @relation("EntityLinkUser")
+  orgCreateRequests    OrganizationCreateRequest[] @relation("OrgCreateRequester")
+  orgCreateReviews     OrganizationCreateRequest[] @relation("OrgCreateReviewer")
+  notifications        Notification[]
+
+  @@map("users")
+}
+
+model Organization {
+  id        String    @id @default(uuid()) @db.Uuid
+  name      String
+  slug      String    @unique @db.Citext
+  plan      String    @default("free")
+  settings  Json      @default("{}")
+  createdBy String?   @map("created_by") @db.Uuid
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  creator        User?                 @relation("OrgCreator", fields: [createdBy], references: [id])
+  members        OrganizationMember[]
+  inviteLinks    InviteLink[]
+  auditLogs      AuditLog[]
+  knowledgeBases KnowledgeBase[]
+  documents        Document[]
+  documentVersions DocumentVersion[]
+  ingestionJobs    IngestionJob[]
+  chunks           DocumentChunk[]
+  conversations    Conversation[]
+  messages         Message[]
+  feedback         Feedback[]
+  aiUsageLogs      AiUsageLog[]
+  connectors       Connector[]
+  connectorSyncRuns ConnectorSyncRun[]
+  bots             Bot[]
+  entities         Entity[]
+  entityLinks      EntityLink[]
+  evalRuns         EvalRun[]
+  mcpTokens        McpToken[]
+
+  @@map("organizations")
+}
+
+model OrganizationMember {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  userId         String   @map("user_id") @db.Uuid
+  role           OrgRole  @default(member)
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, userId])
+  @@index([userId])
+  @@map("organization_members")
+}
+
+model OrganizationCreateRequest {
+  id               String                            @id @default(uuid()) @db.Uuid
+  name             String
+  slug             String                            @db.Citext
+  status           OrganizationCreateRequestStatus   @default(pending)
+  requestedBy      String                            @map("requested_by") @db.Uuid
+  reviewedBy       String?                           @map("reviewed_by") @db.Uuid
+  reviewNote       String?                           @map("review_note")
+  organizationId   String?                           @map("organization_id") @db.Uuid
+  createdAt        DateTime                          @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime                          @updatedAt @map("updated_at") @db.Timestamptz(6)
+  reviewedAt       DateTime?                         @map("reviewed_at") @db.Timestamptz(6)
+
+  requester    User  @relation("OrgCreateRequester", fields: [requestedBy], references: [id], onDelete: Cascade)
+  reviewer     User? @relation("OrgCreateReviewer", fields: [reviewedBy], references: [id], onDelete: SetNull)
+
+  @@index([status, createdAt])
+  @@index([requestedBy, createdAt])
+  @@index([slug, status])
+  @@map("organization_create_requests")
+}
+
+model InviteLink {
+  id             String    @id @default(uuid()) @db.Uuid
+  organizationId String    @map("organization_id") @db.Uuid
+  tokenHash      String    @unique @map("token_hash")
+  role           OrgRole   @default(member)
+  createdBy      String    @map("created_by") @db.Uuid
+  expiresAt      DateTime  @map("expires_at") @db.Timestamptz(6)
+  maxUses        Int?      @map("max_uses")
+  useCount       Int       @default(0) @map("use_count")
+  revokedAt      DateTime? @map("revoked_at") @db.Timestamptz(6)
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  creator      User         @relation("InviteLinkCreator", fields: [createdBy], references: [id])
+
+  @@index([organizationId])
+  @@map("invite_links")
+}
+
+model RefreshToken {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  tokenHash String    @unique @map("token_hash")
+  expiresAt DateTime  @map("expires_at") @db.Timestamptz(6)
+  revokedAt DateTime? @map("revoked_at") @db.Timestamptz(6)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  userAgent String?   @map("user_agent")
+  ip        String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("refresh_tokens")
+}
+
+model AuditLog {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String?  @map("organization_id") @db.Uuid
+  actorUserId    String?  @map("actor_user_id") @db.Uuid
+  action         String
+  resourceType   String?  @map("resource_type")
+  resourceId     String?  @map("resource_id")
+  ip             String?
+  userAgent      String?  @map("user_agent")
+  metadata       Json     @default("{}")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  actor        User?         @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, createdAt])
+  @@map("audit_logs")
+}
+
+model KnowledgeBase {
+  id                  String              @id @default(uuid()) @db.Uuid
+  organizationId      String              @map("organization_id") @db.Uuid
+  name                String
+  description         String?
+  status              KnowledgeBaseStatus @default(active)
+  embeddingModel      String              @default("text-embedding-3-small") @map("embedding_model")
+  embeddingDimensions Int                 @default(1536) @map("embedding_dimensions")
+  settings            Json                @default("{}")
+  createdBy           String              @map("created_by") @db.Uuid
+  createdAt           DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime            @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt           DateTime?           @map("deleted_at") @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  creator      User         @relation("KbCreator", fields: [createdBy], references: [id])
+  documents     Document[]
+  chunks        DocumentChunk[]
+  conversations Conversation[]
+  acls          KnowledgeBaseAcl[]
+  connectors    Connector[]
+  bots          Bot[]
+  evalRuns      EvalRun[]
+
+  @@index([organizationId, deletedAt])
+  @@map("knowledge_bases")
+}
+
+enum BotStatus {
+  active
+  archived
+}
+
+model Bot {
+  id              String    @id @default(uuid()) @db.Uuid
+  organizationId  String    @map("organization_id") @db.Uuid
+  knowledgeBaseId String    @map("knowledge_base_id") @db.Uuid
+  name            String
+  description     String?
+  systemPrompt    String    @default("You are an enterprise knowledge assistant. Answer ONLY using the provided context and cite sources with [n].") @map("system_prompt")
+  status          BotStatus @default(active)
+  settings        Json      @default("{}")
+  createdBy       String    @map("created_by") @db.Uuid
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt       DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  organization  Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  knowledgeBase KnowledgeBase @relation(fields: [knowledgeBaseId], references: [id], onDelete: Cascade)
+  creator       User          @relation("BotCreator", fields: [createdBy], references: [id])
+  conversations Conversation[]
+
+  @@index([organizationId, deletedAt])
+  @@index([knowledgeBaseId])
+  @@map("bots")
+}
+
+model KnowledgeBaseAcl {
+  id              String           @id @default(uuid()) @db.Uuid
+  knowledgeBaseId String           @map("knowledge_base_id") @db.Uuid
+  principalType   AclPrincipalType @map("principal_type")
+  principalId     String           @map("principal_id")
+  permission      AclPermission    @default(read)
+  createdAt       DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime         @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  knowledgeBase KnowledgeBase @relation(fields: [knowledgeBaseId], references: [id], onDelete: Cascade)
+
+  @@unique([knowledgeBaseId, principalType, principalId])
+  @@index([knowledgeBaseId])
+  @@map("knowledge_base_acls")
+}
+
+model Document {
+  id               String              @id @default(uuid()) @db.Uuid
+  organizationId   String              @map("organization_id") @db.Uuid
+  knowledgeBaseId  String              @map("knowledge_base_id") @db.Uuid
+  title            String
+  status           DocumentStatus      @default(pending)
+  kind             DocumentKind        @default(file)
+  trustStatus      DocumentTrustStatus @default(unverified) @map("trust_status")
+  verifiedAt       DateTime?           @map("verified_at") @db.Timestamptz(6)
+  verifiedBy       String?             @map("verified_by") @db.Uuid
+  expiresAt        DateTime?           @map("expires_at") @db.Timestamptz(6)
+  ownerUserId      String?             @map("owner_user_id") @db.Uuid
+  externalId       String?             @map("external_id")
+  externalSource   String?             @map("external_source")
+  contentChecksum  String?             @map("content_checksum")
+  externalAcl      Json                @default("[]") @map("external_acl")
+  currentVersionId String?             @map("current_version_id") @db.Uuid
+  createdBy        String              @map("created_by") @db.Uuid
+  createdAt        DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime            @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt        DateTime?           @map("deleted_at") @db.Timestamptz(6)
+
+  organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  knowledgeBase  KnowledgeBase    @relation(fields: [knowledgeBaseId], references: [id], onDelete: Cascade)
+  creator        User             @relation("DocumentCreator", fields: [createdBy], references: [id])
+  owner          User?            @relation("DocumentOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
+  verifier       User?            @relation("DocumentVerifier", fields: [verifiedBy], references: [id], onDelete: SetNull)
+  versions       DocumentVersion[]
+  ingestionJobs  IngestionJob[]
+  chunks         DocumentChunk[]
+  acls           DocumentAcl[]
+  entityLinks    EntityLink[]
+  currentVersion DocumentVersion? @relation("DocumentCurrentVersion", fields: [currentVersionId], references: [id], onDelete: SetNull)
+
+  @@index([knowledgeBaseId, deletedAt, createdAt])
+  @@index([organizationId, status])
+  @@index([knowledgeBaseId, trustStatus])
+  @@map("documents")
+}
+
+model DocumentAcl {
+  id            String           @id @default(uuid()) @db.Uuid
+  documentId    String           @map("document_id") @db.Uuid
+  principalType AclPrincipalType @map("principal_type")
+  principalId   String           @map("principal_id")
+  permission    AclPermission    @default(read)
+  createdAt     DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime         @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@unique([documentId, principalType, principalId])
+  @@index([documentId])
+  @@map("document_acls")
+}
+
+model DocumentVersion {
+  id             String      @id @default(uuid()) @db.Uuid
+  documentId     String      @map("document_id") @db.Uuid
+  organizationId String      @map("organization_id") @db.Uuid
+  versionNumber  Int         @map("version_number")
+  storageKey     String      @map("storage_key")
+  mimeType       String      @map("mime_type")
+  byteSize       BigInt      @map("byte_size")
+  checksumSha256 String      @map("checksum_sha256")
+  pageCount      Int?        @map("page_count")
+  parseStatus    ParseStatus @default(pending) @map("parse_status")
+  errorMessage   String?     @map("error_message")
+  originalFilename String?   @map("original_filename")
+  createdBy      String      @map("created_by") @db.Uuid
+  createdAt      DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  document       Document       @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  organization   Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  creator        User           @relation("DocumentVersionCreator", fields: [createdBy], references: [id])
+  currentForDocs Document[]     @relation("DocumentCurrentVersion")
+  ingestionJobs  IngestionJob[]
+  chunks         DocumentChunk[]
+
+  @@unique([documentId, versionNumber])
+  @@index([organizationId])
+  @@map("document_versions")
+}
+
+model IngestionJob {
+  id                String             @id @default(uuid()) @db.Uuid
+  organizationId    String             @map("organization_id") @db.Uuid
+  documentId        String             @map("document_id") @db.Uuid
+  documentVersionId String             @map("document_version_id") @db.Uuid
+  status            IngestionJobStatus @default(queued)
+  attempts          Int                @default(0)
+  errorMessage      String?            @map("error_message")
+  startedAt         DateTime?          @map("started_at") @db.Timestamptz(6)
+  finishedAt        DateTime?          @map("finished_at") @db.Timestamptz(6)
+  createdAt         DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime           @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  organization    Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  document        Document        @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  documentVersion DocumentVersion @relation(fields: [documentVersionId], references: [id], onDelete: Cascade)
+
+  @@index([documentId, createdAt])
+  @@index([organizationId, status])
+  @@map("ingestion_jobs")
+}
+
+model DocumentChunk {
+  id                String   @id @default(uuid()) @db.Uuid
+  organizationId    String   @map("organization_id") @db.Uuid
+  knowledgeBaseId   String   @map("knowledge_base_id") @db.Uuid
+  documentId        String   @map("document_id") @db.Uuid
+  documentVersionId String   @map("document_version_id") @db.Uuid
+  chunkIndex        Int      @map("chunk_index")
+  content           String
+  tokenCount        Int      @map("token_count")
+  metadata          Json     @default("{}")
+  /// Filled in Sprint 5 (pgvector). Null until embedded.
+  embedding         Unsupported("vector(1536)")?
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  organization    Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  knowledgeBase   KnowledgeBase   @relation(fields: [knowledgeBaseId], references: [id], onDelete: Cascade)
+  document        Document        @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  documentVersion DocumentVersion @relation(fields: [documentVersionId], references: [id], onDelete: Cascade)
+
+  @@unique([documentVersionId, chunkIndex])
+  @@index([knowledgeBaseId, documentVersionId])
+  @@index([organizationId])
+  @@map("document_chunks")
+}
+
+model Conversation {
+  id              String             @id @default(uuid()) @db.Uuid
+  organizationId  String             @map("organization_id") @db.Uuid
+  knowledgeBaseId String             @map("knowledge_base_id") @db.Uuid
+  botId           String?            @map("bot_id") @db.Uuid
+  userId          String             @map("user_id") @db.Uuid
+  title           String             @default("New conversation")
+  status          ConversationStatus @default(active)
+  createdAt       DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime           @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt       DateTime?          @map("deleted_at") @db.Timestamptz(6)
+
+  organization  Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  knowledgeBase KnowledgeBase @relation(fields: [knowledgeBaseId], references: [id], onDelete: Cascade)
+  bot           Bot?          @relation(fields: [botId], references: [id], onDelete: SetNull)
+  user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages      Message[]
+
+  @@index([organizationId, userId, deletedAt])
+  @@index([knowledgeBaseId])
+  @@index([botId])
+  @@map("conversations")
+}
+
+model Message {
+  id             String      @id @default(uuid()) @db.Uuid
+  conversationId String      @map("conversation_id") @db.Uuid
+  organizationId String      @map("organization_id") @db.Uuid
+  role           MessageRole
+  content        String
+  tokenIn        Int?        @map("token_in")
+  tokenOut       Int?        @map("token_out")
+  model          String?
+  latencyMs      Int?        @map("latency_ms")
+  createdAt      DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  conversation Conversation      @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  organization Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  citations    MessageCitation[]
+  feedback     Feedback?
+
+  @@index([conversationId, createdAt])
+  @@index([organizationId])
+  @@map("messages")
+}
+
+model MessageCitation {
+  id                String  @id @default(uuid()) @db.Uuid
+  messageId         String  @map("message_id") @db.Uuid
+  documentId        String  @map("document_id") @db.Uuid
+  documentVersionId String  @map("document_version_id") @db.Uuid
+  chunkId           String  @map("chunk_id") @db.Uuid
+  snippet           String
+  score             Float?
+  metadata          Json    @default("{}")
+
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@index([messageId])
+  @@map("message_citations")
+}
+
+model Feedback {
+  id             String         @id @default(uuid()) @db.Uuid
+  organizationId String         @map("organization_id") @db.Uuid
+  messageId      String         @unique @map("message_id") @db.Uuid
+  userId         String         @map("user_id") @db.Uuid
+  rating         FeedbackRating
+  reason         String?
+  comment        String?
+  createdAt      DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  message      Message      @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, createdAt])
+  @@map("feedback")
+}
+
+model AiUsageLog {
+  id              String   @id @default(uuid()) @db.Uuid
+  organizationId  String   @map("organization_id") @db.Uuid
+  userId          String?  @map("user_id") @db.Uuid
+  feature         String
+  provider        String
+  model           String
+  tokensIn        Int      @default(0) @map("tokens_in")
+  tokensOut       Int      @default(0) @map("tokens_out")
+  costUsdEstimate Decimal? @map("cost_usd_estimate") @db.Decimal(12, 6)
+  latencyMs       Int      @default(0) @map("latency_ms")
+  requestId       String?  @map("request_id")
+  metadata        Json     @default("{}")
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, createdAt])
+  @@index([organizationId, feature, createdAt])
+  @@map("ai_usage_logs")
+}
+
+model Connector {
+  id              String          @id @default(uuid()) @db.Uuid
+  organizationId  String          @map("organization_id") @db.Uuid
+  knowledgeBaseId String          @map("knowledge_base_id") @db.Uuid
+  type            ConnectorType
+  name            String
+  status          ConnectorStatus @default(active)
+  config          Json            @default("{}")
+  cursor          Json            @default("{}")
+  lastSyncAt      DateTime?       @map("last_sync_at") @db.Timestamptz(6)
+  createdBy       String          @map("created_by") @db.Uuid
+  createdAt       DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime        @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  organization  Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  knowledgeBase KnowledgeBase      @relation(fields: [knowledgeBaseId], references: [id], onDelete: Cascade)
+  creator       User               @relation("ConnectorCreator", fields: [createdBy], references: [id])
+  syncRuns      ConnectorSyncRun[]
+
+  @@index([organizationId])
+  @@index([knowledgeBaseId])
+  @@map("connectors")
+}
+
+model ConnectorSyncRun {
+  id             String              @id @default(uuid()) @db.Uuid
+  connectorId    String              @map("connector_id") @db.Uuid
+  organizationId String              @map("organization_id") @db.Uuid
+  status         ConnectorSyncStatus @default(queued)
+  stats          Json                @default("{}")
+  error          String?
+  startedAt      DateTime?           @map("started_at") @db.Timestamptz(6)
+  finishedAt     DateTime?           @map("finished_at") @db.Timestamptz(6)
+  createdAt      DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  connector    Connector    @relation(fields: [connectorId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([connectorId, createdAt])
+  @@map("connector_sync_runs")
+}
+
+model OidcIdentity {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  provider  String
+  subject   String
+  email     String?  @db.Citext
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, subject])
+  @@index([userId])
+  @@map("oidc_identities")
+}
+
+model Entity {
+  id             String     @id @default(uuid()) @db.Uuid
+  organizationId String     @map("organization_id") @db.Uuid
+  type           EntityType
+  name           String
+  externalKey    String?    @map("external_key")
+  metadata       Json       @default("{}")
+  createdAt      DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime   @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  links        EntityLink[]
+
+  @@unique([organizationId, type, name])
+  @@index([organizationId, type])
+  @@map("entities")
+}
+
+model EntityLink {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  entityId       String   @map("entity_id") @db.Uuid
+  documentId     String?  @map("document_id") @db.Uuid
+  userId         String?  @map("user_id") @db.Uuid
+  relation       String   @default("related")
+  weight         Float    @default(1)
+  metadata       Json     @default("{}")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  entity       Entity       @relation(fields: [entityId], references: [id], onDelete: Cascade)
+  document     Document?    @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  user         User?        @relation("EntityLinkUser", fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, entityId])
+  @@index([documentId])
+  @@map("entity_links")
+}
+
+model EvalRun {
+  id              String        @id @default(uuid()) @db.Uuid
+  organizationId  String        @map("organization_id") @db.Uuid
+  knowledgeBaseId String?       @map("knowledge_base_id") @db.Uuid
+  status          EvalRunStatus @default(queued)
+  score           Float?
+  stats           Json          @default("{}")
+  error           String?
+  createdAt       DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  finishedAt      DateTime?     @map("finished_at") @db.Timestamptz(6)
+
+  organization  Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  knowledgeBase KnowledgeBase? @relation(fields: [knowledgeBaseId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, createdAt])
+  @@map("eval_runs")
+}
+
+model McpToken {
+  id             String    @id @default(uuid()) @db.Uuid
+  organizationId String    @map("organization_id") @db.Uuid
+  name           String
+  tokenHash      String    @unique @map("token_hash")
+  scopes         String[]  @default(["search", "get_document"])
+  revokedAt      DateTime? @map("revoked_at") @db.Timestamptz(6)
+  lastUsedAt     DateTime? @map("last_used_at") @db.Timestamptz(6)
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@map("mcp_tokens")
+}
+
+model Notification {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  type      String
+  title     String
+  body      String?
+  link      String?
+  data      Json      @default("{}")
+  readAt    DateTime? @map("read_at") @db.Timestamptz(6)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([userId, readAt])
+  @@map("notifications")
+}
+
+/// Singleton platform (Super Admin) settings — always use id = "default"
+model PlatformSettings {
+  id                       String   @id @default("default")
+  defaultEmbeddingProvider String   @default("gemini") @map("default_embedding_provider")
+  defaultLlmProvider       String   @default("gemini") @map("default_llm_provider")
+  costPer1kInputUsd        Decimal  @default(0.00015) @map("cost_per_1k_input_usd") @db.Decimal(12, 6)
+  costPer1kOutputUsd       Decimal  @default(0.0006) @map("cost_per_1k_output_usd") @db.Decimal(12, 6)
+  notes                    String?
+  updatedBy                String?  @map("updated_by") @db.Uuid
+  createdAt                DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@map("platform_settings")
+}

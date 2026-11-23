@@ -1,0 +1,52 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: akb-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: akb
+      POSTGRES_PASSWORD: akb_dev_password
+      POSTGRES_DB: ai_knowledge_base
+    ports:
+      - "5432:5432"
+    volumes:
+      - akb_pg_data:/var/lib/postgresql/data
+      - ./init-db.sql:/docker-entrypoint-initdb.d/init-db.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U akb -d ai_knowledge_base"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: akb-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - akb_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  minio:
+    image: minio/minio:latest
+    container_name: akb-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: akbminio
+      MINIO_ROOT_PASSWORD: akbminio_dev_password
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - akb_minio_data:/data
+
+volumes:
+  akb_pg_data:
+  akb_redis_data:
+  akb_minio_data:
