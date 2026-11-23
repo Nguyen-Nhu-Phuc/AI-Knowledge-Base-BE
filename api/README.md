@@ -1,66 +1,43 @@
-# AI Knowledge Base — API (NestJS)
+# API (NestJS)
 
-Backend hoàn chỉnh theo implementation plan (Auth → Org → KB/Docs → Ingestion → Embed/Search → Chat/RAG → Analytics/Admin).
+NestJS API + Prisma + BullMQ workers cho AI Knowledge Base.
 
 ## Stack
 
-- NestJS 11 + Prisma 6 + PostgreSQL/pgvector
-- BullMQ (ingestion + embedding workers)
-- MinIO/S3 presigned upload
-- JWT + refresh cookie, RBAC multi-tenant
+- NestJS 11 + Prisma + PostgreSQL / pgvector  
+- BullMQ (ingestion + embedding)  
+- MinIO / S3 presigned upload  
+- JWT + refresh cookie, RBAC multi-tenant  
 
-## Chạy local
+## Chạy local (trong repo BE)
 
 ```bash
 # Infra
-cd ../../infra/docker && docker compose up -d
+cd ../infra/docker && docker compose up -d
 
-# Migrate + API
-cd ../../apps/api
+# API
+cd ../../api
 cp .env.example .env
+npm install
 npx prisma migrate deploy
 npm run start:dev
 
-# Worker
+# Worker (terminal khác)
 npm run start:worker:dev
 ```
 
-AI service: xem `apps/ai/README.md`.
+AI service: xem [`../ai/README.md`](../ai/README.md).
 
-## Modules / Endpoints
+API: `http://localhost:3001/api/v1`
 
-### Auth & Users
-- `POST /auth/register|login|refresh|logout`
-- `GET|PATCH /users/me`, `PATCH /users/me/password`
+## Modules chính
 
-### Organizations
-- CRUD org, members, invite-links
+- **Auth / Users** — register, login, refresh, logout, profile  
+- **Organizations** — yêu cầu tạo org (Super Admin duyệt), members, invite  
+- **Knowledge Bases & Documents** — CRUD, upload, jobs, versions, chunks  
+- **Search** — hybrid vector + FTS + RRF  
+- **Chat** — SSE RAG / research + feedback  
+- **Notifications** — in-app  
+- **Admin** — Super Admin (`PLATFORM_ADMIN_EMAILS`)  
 
-### Knowledge Bases & Documents
-- KB CRUD
-- Presigned upload → confirm → jobs/versions/chunks/retry/reprocess
-
-### Search
-- `POST /organizations/:orgId/knowledge-bases/:kbId/search` — Hybrid (vector + FTS + RRF)
-
-### Chat / RAG / Research
-- `POST .../knowledge-bases/:kbId/chat` — SSE stream  
-  Body: `{ message, conversationId?, rewrite?, research? }`
-- Conversations CRUD + messages
-- `POST .../messages/:messageId/feedback`
-
-SSE events: `conversation.created`, `status`, `message.delta`, `message.citations`, `message.completed`, `error`
-
-### Analytics
-- `GET /organizations/:orgId/usage`
-- `GET /organizations/:orgId/analytics/overview`
-
-### Admin (platform)
-- `GET /admin/organizations`
-- `GET /admin/jobs`
-- `POST /admin/organizations/:id/disable`
-
-## Embedding / LLM
-
-Mặc định AI service dùng `mock` provider (không cần OpenAI key).  
-Đặt `EMBEDDING_PROVIDER=openai`, `LLM_PROVIDER=openai` + `OPENAI_API_KEY` trên `apps/ai/.env` khi cần thật.
+Chi tiết env và kiến trúc: README gốc của repo BE.
