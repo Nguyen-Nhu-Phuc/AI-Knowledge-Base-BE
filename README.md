@@ -2,6 +2,15 @@
 
 Hệ thống quản lý tri thức doanh nghiệp (Advanced RAG + AI Agent).
 
+## Deploy (production)
+
+| | URL |
+|--|--|
+| **API** | https://akb-api-production.up.railway.app |
+| Health | https://akb-api-production.up.railway.app/api/v1/health |
+| **Frontend** | https://tringuon-web.vercel.app |
+
+
 ## Repos trên GitHub
 
 | Phần | Repo |
