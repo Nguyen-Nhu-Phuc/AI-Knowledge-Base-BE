@@ -192,7 +192,7 @@ def _gemini_llm_model_chain() -> list[str]:
         if m and m not in seen:
             seen.add(m)
             ordered.append(m)
-    return ordered or ["gemini-2.5-flash"]
+    return ordered or ["gemini-flash-lite-latest", "gemini-3-flash-preview"]
 
 
 async def _chat_gemini(
@@ -215,10 +215,12 @@ async def _chat_gemini(
     }
 
     models = _gemini_llm_model_chain()
-    retries = max(0, int(getattr(settings, "gemini_llm_retries", 2) or 0))
+    retries = max(0, int(getattr(settings, "gemini_llm_retries", 1) or 0))
     last_err = "Gemini request failed"
+    # Keep per-request timeout tight so chat SSE cannot stall for minutes
+    timeout = httpx.Timeout(connect=10.0, read=35.0, write=15.0, pool=10.0)
 
-    async with httpx.AsyncClient(timeout=120.0) as client:
+    async with httpx.AsyncClient(timeout=timeout) as client:
         for model in models:
             url = (
                 f"{settings.gemini_base_url.rstrip('/')}"
@@ -232,7 +234,7 @@ async def _chat_gemini(
                 except (httpx.TimeoutException, httpx.TransportError) as exc:
                     last_err = f"Gemini timeout/network on {model}: {exc.__class__.__name__}"
                     if attempt < retries:
-                        await asyncio.sleep(1.5 * (attempt + 1))
+                        await asyncio.sleep(0.8 * (attempt + 1))
                         continue
                     break
 
@@ -247,10 +249,11 @@ async def _chat_gemini(
                         f"Gemini {model} unavailable ({response.status_code})."
                     )
                     if attempt < retries:
-                        await asyncio.sleep(1.5 * (attempt + 1))
+                        await asyncio.sleep(0.8 * (attempt + 1))
                         continue
                     break
 
+                # 404 / retired models: skip to next model immediately (no retries)
                 if response.status_code >= 400:
                     try:
                         detail = (response.json().get("error") or {}).get(
@@ -483,10 +486,18 @@ async def chat_complete(
         )
         return answer, "openai", model, tin, tout
 
-    answer, model, tin, tout = await _chat_gemini(
-        system=system, messages=messages, temperature=temperature
-    )
-    return answer, "gemini", model, tin, tout
+    try:
+        answer, model, tin, tout = await _chat_gemini(
+            system=system, messages=messages, temperature=temperature
+        )
+        return answer, "gemini", model, tin, tout
+    except Exception:
+        # Keep chat usable when Gemini is overloaded / retired for this key
+        joined = "\n".join(m["content"] for m in messages if m.get("role") == "user")
+        answer = _mock_answer_from_messages(messages)
+        tin = max(1, (len(system) + len(joined) + 3) // 4)
+        tout = max(1, (len(answer) + 3) // 4)
+        return answer, "mock", "mock-fallback", tin, tout
 
 
 def rewrite_query_heuristic(query: str) -> str:

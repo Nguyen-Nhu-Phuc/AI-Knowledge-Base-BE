@@ -23,13 +23,13 @@ class Settings(BaseSettings):
     # Text → Answer
     llm_provider: str = "mock"  # mock | openai | gemini
     llm_model: str = "gpt-4o-mini"
-    # Prefer lighter model first — 3.8-flash often returns 503 under load
-    gemini_llm_model: str = "gemini-2.5-flash"
-    # Comma-separated fallbacks tried on 503 / timeout
+    # Prefer currently available flash models (2.5-* is 404 for new API keys)
+    gemini_llm_model: str = "gemini-flash-lite-latest"
+    # Comma-separated fallbacks tried on 503 / timeout / 404
     gemini_llm_fallbacks: str = (
-        "gemini-2.5-flash-lite,gemini-flash-latest,gemini-3.8-flash"
+        "gemini-3-flash-preview,gemini-flash-latest,gemini-3.8-flash"
     )
-    gemini_llm_retries: int = 2
+    gemini_llm_retries: int = 1
 
     openai_api_key: str = ""
     openai_base_url: str = "https://api.openai.com/v1"

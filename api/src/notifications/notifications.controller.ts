@@ -1,5 +1,6 @@
 import {
   Controller,
+  Delete,
   Get,
   HttpCode,
   Param,
@@ -41,5 +42,20 @@ export class NotificationsController {
   @Post('read-all')
   markAllRead(@CurrentUser() user: AuthUser) {
     return this.notifications.markAllRead(user.id);
+  }
+
+  @HttpCode(200)
+  @Delete()
+  removeAll(@CurrentUser() user: AuthUser) {
+    return this.notifications.removeAll(user.id);
+  }
+
+  @HttpCode(200)
+  @Delete(':id')
+  remove(
+    @CurrentUser() user: AuthUser,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    return this.notifications.remove(user.id, id);
   }
 }

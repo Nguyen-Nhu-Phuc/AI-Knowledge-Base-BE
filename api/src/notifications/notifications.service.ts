@@ -140,4 +140,26 @@ export class NotificationsService {
     });
     return { updated: result.count };
   }
+
+  async remove(userId: string, id: string) {
+    const row = await this.prisma.notification.findFirst({
+      where: { id, userId },
+      select: { id: true },
+    });
+    if (!row) {
+      throw new NotFoundException({
+        code: 'NOT_FOUND',
+        message: 'Notification not found',
+      });
+    }
+    await this.prisma.notification.delete({ where: { id } });
+    return { success: true };
+  }
+
+  async removeAll(userId: string) {
+    const result = await this.prisma.notification.deleteMany({
+      where: { userId },
+    });
+    return { deleted: result.count };
+  }
 }

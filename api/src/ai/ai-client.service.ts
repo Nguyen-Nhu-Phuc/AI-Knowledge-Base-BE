@@ -64,15 +64,32 @@ export class AiClientService {
     return this.config.getOrThrow<string>('AI_SERVICE_SECRET');
   }
 
-  private async postJson<T>(path: string, body: unknown): Promise<T> {
-    const response = await fetch(`${this.baseUrl()}${path}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-AI-Service-Secret': this.secret(),
-      },
-      body: JSON.stringify(body),
-    });
+  private async postJson<T>(
+    path: string,
+    body: unknown,
+    timeoutMs = 90_000,
+  ): Promise<T> {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    let response: Response;
+    try {
+      response = await fetch(`${this.baseUrl()}${path}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-AI-Service-Secret': this.secret(),
+        },
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      });
+    } catch (err) {
+      if (err instanceof Error && err.name === 'AbortError') {
+        throw new Error(`AI ${path} timed out after ${timeoutMs}ms`);
+      }
+      throw err;
+    } finally {
+      clearTimeout(timer);
+    }
     if (!response.ok) {
       let detail = response.statusText;
       try {

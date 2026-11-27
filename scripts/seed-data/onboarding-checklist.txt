@@ -1,0 +1,23 @@
+Acme Corp — New Hire Onboarding Checklist
+
+Day 1
+- Complete SSO account setup
+- Join Slack workspaces: #general, #it-help, #people
+- Read the Employee Handbook in the HR knowledge base
+- Meet your buddy for a 30-minute intro call
+
+Week 1
+- Finish security awareness training
+- Set up laptop disk encryption and MFA
+- Review product overview docs for your team
+- Schedule 1:1 with your manager
+
+Week 2
+- Shadow a support or customer call (if applicable)
+- Create or join the relevant knowledge base
+- Upload your first team note / runbook
+
+Contacts
+- People Ops: people@acme.example
+- IT: it@acme.example
+- Security: security@acme.example

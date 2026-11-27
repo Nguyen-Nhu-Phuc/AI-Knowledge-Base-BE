@@ -33,6 +33,9 @@ export class ChatService {
 
   private writeSse(res: Response, event: string, data: unknown) {
     res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+    // Express compression / proxies may buffer; flush keeps chat status live
+    const flushable = res as Response & { flush?: () => void };
+    flushable.flush?.();
   }
 
   async listConversations(orgId: string, userId: string) {
